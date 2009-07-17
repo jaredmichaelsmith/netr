@@ -16,6 +16,7 @@ import sys, numpy, math, logging, os, random, ConfigParser
 import gc
 from progressbar import *
 from metrics import Metric
+from data import Data
 
 class NN:
     def __init__(self, nIn, nOut, config): 
@@ -288,46 +289,14 @@ class NN:
         self.weights, self.config = pickle.load(file(modelname))
         self.reload(self.config, self.weights)
 
-##############################################################################
-
-def readJf(filename, appendConstOne = False):
-    first = True
-    cls, feat = 0,0
-    data = []
-    if appendConstOne: const = [1.0]# + [0.5]*cls
-    else: const = []
-
-    for l in file(filename).readlines():
-        if first: 
-            cls, feat = [ int(s) for s in l.split() ]
-            first = False
-            continue
-
-        if l.startswith("-1"): break
-
-        vec = numpy.matrix( [float(f) for f in l.split()]+const ) # <- last one for bias
-        data.append( vec )
-
-    if appendConstOne:
-        feat += 1 # +1 for bias
-
-    return cls, feat, data 
-
-def writeProbs(probs, filename):
-    f = open(filename,'w')
-    for pr in probs:
-        f.write(" ".join("%.6f"%s for s in pr.flat))
-        f.write("\n")
-    f.close()
 
 ##############################################################################
     
 def main(config):
-    #gc.set_debug(gc.DEBUG_LEAK | gc.DEBUG_STATS)
-    cls, feat, dataTest = readJf(config.get("Input","test"), True)
-    cls, feat, dataTrain = readJf(config.get("Input","train"), True)
+    dataTest  = Data(config.get("Input","test"), config.get("Input","format"))
+    dataTrain = Data(config.get("Input","train"), config.get("Input","format"))
 
-    net = NN(feat, cls, config)
+    net = NN(dataTrain.feat, dataTrain.cls, config)
     model = config.get("Input", "loadmodel")
     if model:
         net.loadmodel(model)
@@ -341,8 +310,8 @@ def main(config):
 
     ftr = config.get("Output", "probstrain")
     fte = config.get("Output", "probstest")
-    if ftr: writeProbs(trpr, ftr)
-    if fte: writeProbs(tepr, fte)
+    if ftr: Data.writeProbs(trpr, ftr)
+    if fte: Data.writeProbs(tepr, fte)
 
     model = config.get("Output", "savemodel")
     if model:
@@ -350,6 +319,7 @@ def main(config):
     
 
 ##############################################################################
+
 if __name__ == "__main__":
     try:
         import psyco
@@ -357,48 +327,7 @@ if __name__ == "__main__":
     except ImportError: pass
     logging.basicConfig(format="%(message)s")
 
-    from optparse import OptionParser, OptionGroup
-    parser = OptionParser(version="1.0", description="skynet")
-
-    g = OptionGroup(parser, "Input")
-    g.add_option("-c", "--config", dest="config", help="configuration file", metavar="FILE")
-    g.add_option("-t", "--tr", dest="train", help="train data", metavar="FILE")
-    g.add_option("-T", "--te", dest="test", help="test data", metavar="FILE")
-    g.add_option("-u", "--loadmodel", dest="loadmodel", help="load model from file", metavar="FILE")
-    parser.add_option_group(g)
-
-    g = OptionGroup(parser, "Architecture")
-    g.add_option("-i", "--iter", dest="iter", type="int", default=10)
-    g.add_option("-l", "--layer", dest="layer", type="int", default=1)
-    g.add_option("-n", "--nodes", dest="nodes", type="int", help="nodes per hidden layer", default=2)
-    g.add_option("-a", "--activation", dest="activation", type="string", help="activation function [logistic, tanh, linear, softmax]", default="logistic")
-    g.add_option("-w", "--initweights", dest="initweights", type="string", help="weights initialization [randgauss, randuni, uniform]", default="randgauss")
-    g.add_option("-r", "--errorfct", dest="errorfunction", help="error function [sse, sce]", default="sse")
-    parser.add_option_group(g)
-
-    g = OptionGroup(parser, "Factors")
-    g.add_option("-o", "--initoffset", dest="io", type="float", help="initial weights scaling factor", default=0.01)
-    g.add_option("-e", "--etha", dest="etha", type="float", help="learning rate", default=1.0)
-    g.add_option("-p", "--alpha", dest="alpha", type="float", help="momentum", default=0.0)
-    parser.add_option_group(g)
-
-    g = OptionGroup(parser, "Output")
-    choices=["lift", "pp", "fmeasure:<target_class>","tester",""]
-    g.add_option("-m", "--metrics", dest="metrics", type="choice", help="metrics to display (comma separated) [%s]"%(",".join(choices))[:-1], default="", choices=choices)
-    g.add_option("--probstr", dest="probstrain", help="write p(c|x) of train data to file", metavar="FILE")
-    g.add_option("--probste", dest="probstest", help="write p(c|x) of test data to file", metavar="FILE")
-    g.add_option("-v", "--verbosity", dest="verbosity", help="verbosity level [0,1,..]", default=1)
-    g.add_option("-s", "--savemodel", dest="savemodel", help="save model to file", metavar="FILE")
-    g.add_option("-b", "--interactive", dest="interactive", help="show progress bar", default="True")
-    parser.add_option_group(g)
-
-    (options, args) = parser.parse_args(args=None, values=None)
-
-    config = ConfigParser.SafeConfigParser(options.__dict__)
-    if options.config: config.read(options.config)
-
-    if None in [config.get("Input","train"), config.get("Input", "test")]:
-        print "-t and -T required!"
-        sys.exit(-1)
+    from usage import *
+    config = usage()
 
     main(config)
