@@ -109,8 +109,8 @@ class Data:
             if line.startswith("#"): continue
             line = line.split()
 
-            if line[0] == "-1": self.target.append(0)
-            else: self.target.append(1)
+            if line[0] == "-1": self.targets.append(0)
+            else: self.targets.append(1)
     
             last = int( line[-1].split(":")[0] )
             maxfeat = max(maxfeat, last)
