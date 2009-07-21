@@ -1,0 +1,7 @@
+#summary usage of configuration files
+#labels config
+= General information =
+
+ * type `./netr.py -h` to see a list of supported options
+ * using config files is equivalent to specifying command line arguments, but intended to be clearer for making driving experiments more easy
+ * config files are dumped as part of model
