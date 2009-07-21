@@ -125,8 +125,8 @@ class Data:
 
             for l in line[1:]:
                 k,v = l.split(":")
-                vec[1,int(k)] = float(v)
-            vec[1,-1] = 1.0
+                vec[0,int(k)] = float(v)
+            vec[0,-1] = 1.0
 
             self.data.append( vec )
 
