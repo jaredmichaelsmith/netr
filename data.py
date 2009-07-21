@@ -13,24 +13,49 @@
 # You should have received a copy of the GNU General Public License
 # along with netr.  If not, see <http://www.gnu.org/licenses/>.
 
-import numpy
+import numpy, gzip, sys, logging
 
 class Data:
-    def __init__(self, filename, format):
+
+    def __init__(self, filename, format, verbosity=0):
         self.cls  = -1
         self.feat = -1
         self.data = []
         self.targets = []
+        self.verbosity = verbosity
 
-        if format == "jf":
-            self.readJf(filename)
+        if verbosity == 1: 
+            sys.stderr.write("Reading '%s' (%s)... " % (filename, format))
 
-        elif format.startswith("csv"):
-            _,delimiter = format.split(":")
-            self.readCSV(filename, delimiter)
+        if filename.endswith( ".gz" ):
+            self.open = gzip.open
+        else:
+            self.open = open
 
-        elif format == "svm":
-            self.readSVM(filename)
+        try:
+            if format == "jf":
+                self.readJf(filename)
+    
+            elif format.startswith("csv") and ":" in format:
+                _,delimiter = format.split(":")
+                self.readCSV(filename, delimiter)
+    
+            elif format == "svm":
+                self.readSVM(filename)
+    
+            else: 
+                logging.error('Unknown format: %s' % format)
+                sys.exit(-1)
+
+        except IOError, e:
+            logging.error("file not found!")
+            sys.exit(-1)
+
+        if verbosity == 1: 
+            sys.stderr.write("done: %d classes, %d attributes, %d instances\n" % \
+                (self.cls, self.feat, len(self.data)))
+
+        self.__iter__ = self.data.__iter__
 
 ##############################################################################
 
@@ -41,10 +66,10 @@ class Data:
     def readJf(self, filename):
         first = True
     
-        for l in file(filename).readlines():
+        for l in self.open(filename):
             if l.startswith("#"): continue
             if first: 
-                self.cls, self.feat = [ int(s) for s in l.split() ]
+                self.cls, self.feat = map(int, l.split())
                 first = False
                 continue
     
@@ -60,8 +85,12 @@ class Data:
 ##############################################################################
 
     def readCSV(self, filename, delimiter):
+        """
+        Target variable must be in first column.
+        """
         import csv
-        for line in csv.reader(open(filename), delimiter=delimiter):
+        for line in csv.reader(self.open(filename), delimiter=delimiter):
+            if line[0].startswith("#"): continue
             vec = numpy.matrix( map(float, line[1:])+[1.0] ) 
             self.data.append( vec )
             self.targets.append( int(line[0]) )
@@ -73,8 +102,11 @@ class Data:
 
     def readSVM(self, filename):
         self.cls = 2
+
+        # find number of attributes
         maxfeat = -1
-        for line in file(filename).readlines():
+        for line in self.open(filename):
+            if line.startswith("#"): continue
             line = line.split()
 
             if line[0] == "-1": self.target.append(0)
@@ -85,7 +117,9 @@ class Data:
            
         self.feat = maxfeat + 1
 
-        for line in file(filename).readlines():
+        # fill self.data
+        for line in self.open(filename):
+            if line.startswith("#"): continue
             line = line.split()
             vec = numpy.zeros( [1,self.feat] ) 
 

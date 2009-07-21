@@ -13,16 +13,13 @@
 # You should have received a copy of the GNU General Public License
 # along with netr.  If not, see <http://www.gnu.org/licenses/>.
 import sys, numpy, math, logging, os, random, ConfigParser
-import gc
 from progressbar import *
 from metrics import Metric
 from data import Data
 
 class NN:
-    def __init__(self, nIn, nOut, config): 
+    def __init__(self, config): 
         self.config = config
-        self.nIn = nIn
-        self.nOut = nOut
         self.nLayer         = config.getint("Architecture", "layer")
         self.nNodes         = config.getint("Architecture", "nodes")
         self.nIter          = config.getint("Architecture", "iterations")
@@ -31,14 +28,14 @@ class NN:
         self.steepness      = config.getfloat("Factors", "steepness") 
         self.stepsizedec    = config.getfloat("Factors", "stepsizedec") 
         self.stepsizeinc    = config.getfloat("Factors", "stepsizeinc") 
-        offset              = config.getfloat("Factors", "initoffset")
+        self.offset         = config.getfloat("Factors", "initoffset")
         self.mindpp         = config.getfloat("Thresholds", "mindpp") 
         self.mindsse        = config.getfloat("Thresholds", "mindsse") 
         self.mindsumweights = config.getfloat("Thresholds", "mindsumweights") 
-        actfunc             = config.get("Architecture", "activation")
-        weightsinit         = config.get("Architecture", "initweights")
+        self.actfunc        = config.get("Architecture", "activation")
+        self.weightsinit    = config.get("Architecture", "initweights")
         self.errfct         = config.get("Architecture", "errorfunction")
-        self.metrics        = Metric(config.get("Output", "metrics"))
+        self.metrics        = Metric(config.get("Output", "metrics"), config.getint("Output", "metricsclass"))
         self.verbosity      = config.getint("Output", "verbosity")
         self.interactive    = config.getboolean("Output", "interactive")
 
@@ -46,23 +43,77 @@ class NN:
         self.outs    = []
         self.deltas  = []
 
+        self.generateActivationFunction()
+    
+    ##############################################################################
+
+    def generateActivationFunction(self):
+
+        if self.actfunc == "logistic":
+            def dphi(net):
+                r = 1.0/(1.0+numpy.exp(-net * self.steepness))
+                return numpy.multiply( r, (1.0-r) )
+            self.phi  = lambda net: 1.0/(1.0+numpy.exp(-net * self.steepness))
+            self.dphi = dphi
+
+        elif self.actfunc == "tanh":
+            self.phi  = lambda net: numpy.tanh(self.steepness * net)
+            self.dphi = lambda net: self.steepness * (1.0-numpy.power(numpy.tanh(net), 2))
+
+        elif self.actfunc == "linear":
+            self.phi  = lambda net: self.steepness * net
+            self.dphi = lambda net: self.steepness
+
+        elif self.actfunc == "softmax":
+            def phi(net):
+                s = 1.0/numpy.exp(-net).sum()
+                return s * numpy.exp(-net)
+            self.phi = foo
+            def dphi(net):
+                r = self.phi(net)
+                return numpy.multiply( r, (1.0-r) )
+            self.dphi = dphi
+
+        elif self.actfunc == "gauss":
+            self.phi = lambda net: numpy.exp(-numpy.power(net-1,2) * self.steepness)
+            self.dphi= lambda net: -2*numpy.multiply(net-1, numpy.exp(-numpy.power(net-1,2)))
+
+        elif self.actfunc == "sin":
+            self.phi = lambda net: numpy.sin(self.steepness * net)
+            self.dphi= lambda net: self.steepness * numpy.cos(self.steepness * net)
+        else:
+            logging.error("Unknown activation function. Available: logistic, tanh, linear, softmax, gauss, sin")
+            sys.exit(-1)
+
+    ##############################################################################
+
+    def reload(self, config, weights):
+        self.__init__(config)
+        self.weights = weights
+
+    ##############################################################################
+
+    def initWeights(self, cls, feat):
+        self.nIn = feat
+        self.nOut = cls
+
         def initWeights( generateMatrixFunc ):
-            self.weights.append( generateMatrixFunc(nIn, self.nNodes) )
+            self.weights.append( generateMatrixFunc(self.nIn, self.nNodes) )
             for i in range(1, self.nLayer):
                 self.weights.append( generateMatrixFunc(self.nNodes, self.nNodes) )
-            self.weights.append( generateMatrixFunc(self.nNodes, nOut) )
+            self.weights.append( generateMatrixFunc(self.nNodes, self.nOut) )
 
-        if weightsinit == "randuni":
-            def mat(n,m): return offset * (numpy.mat(numpy.random.rand(n, m)) + 0.5)
+        if self.weightsinit == "randuni":
+            def mat(n,m): return self.offset * (numpy.mat(numpy.random.rand(n, m)) + 0.5)
 
-        elif weightsinit == "randgauss":
-            def mat(n,m): return numpy.mat(offset*numpy.random.standard_normal( [n, m] ))
+        elif self.weightsinit == "randgauss":
+            def mat(n,m): return self.offset * numpy.mat(numpy.random.standard_normal( [n, m] ))
 
-        elif weightsinit == "uniform":
-            def mat(n,m): return offset * numpy.mat(numpy.ones( [n, m] ))
+        elif self.weightsinit == "uniform":
+            def mat(n,m): return self.offset * numpy.mat(numpy.ones( [n, m] ))
 
-        elif weightsinit == "exponential":
-            def mat(n,m): return offset * numpy.mat(numpy.random.standard_exponential( size=[n, m] ))
+        elif self.weightsinit == "exponential":
+            def mat(n,m): return self.offset * numpy.mat(numpy.random.standard_exponential( size=[n, m] ))
 
         else:
             logging.error("Unknown weights initialization. Available: randuni, randgauss, uniform, exponential")
@@ -73,50 +124,8 @@ class NN:
         from copy import copy
         self.lastchange = copy(self.weights)
 
-        # deltas
-        for i in range(self.nLayer):
-            self.deltas.append( numpy.zeros([1,self.nNodes]) )
-            self.outs.append( [0.0] * self.nNodes )
-        self.deltas.append( numpy.zeros([1,nOut]) )
-        self.outs.append( [0.0] * nOut )
-
-        # generate activation function
-        if actfunc == "logistic":
-            self.phi = lambda net: 1.0/(1.0+numpy.exp(-net * self.steepness))
-            # TODO: speedup teh bottleneck
-            def foo(net):
-                r = self.phi(net)
-                return numpy.multiply( r, (1.0-r) )
-            self.dphi= foo#lambda net: numpy.multiply( self.phi(net), (1.0-self.phi(net)) )
-        elif actfunc == "tanh":
-            self.phi = lambda net: numpy.tanh(self.steepness * net)
-            self.dphi= lambda net: 1.0-numpy.power(numpy.tanh(self.steepness * net), 2)
-            #self.dphi= lambda net: 1.0-numpy.power(net, 2) # wrong dphi from bpnn
-        elif actfunc == "linear":
-            self.phi = lambda net: net
-            self.dphi= lambda net: 1
-        elif actfunc == "softmax":
-            def foo(net):
-                s = 1.0/numpy.exp(-net).sum()
-                return s * numpy.exp(-net)
-            self.phi = foo
-            def bar(net):
-                r = self.phi(net)
-                return numpy.multiply( r, (1.0-r) )
-            self.dphi= bar
-        elif actfunc == "gauss":
-            self.phi = lambda net: numpy.exp(-numpy.power(net-1,2))
-            self.dphi= lambda net: -2*numpy.multiply(net-1, numpy.exp(-numpy.power(net-1,2)))
-        elif actfunc == "step":
-            self.phi = lambda net: numpy.sign(net)
-            self.dphi= lambda net: 1
-        else:
-            logging.error("Unknown activation function. Available: logistic, tanh, linear, softmax, gauss, step")
-            sys.exit(-1)
-    
-    def reload(self, config, weights):
-        self.__init__(self.nIn, self.nOut, config)
-        self.weights = weights
+        self.outs   = [None] * (self.nLayer + 1)
+        self.deltas = [None] * (self.nLayer + 1)
 
     ##############################################################################
 
@@ -124,10 +133,10 @@ class NN:
         conf = numpy.zeros([self.nOut, self.nOut], numpy.int16)
         allprobs = [ None ] * len(data)
         for i,row in enumerate(data):
-            probs = self.passForward(row[:,1:])
-            c_pred = probs.argmax()
-            conf[ int(row[0,0]), c_pred ] += 1
-            allprobs[i] = probs / probs.sum()
+            allprobs[i] = self.passForward(row)
+            conf[ data.targets[i], allprobs[i].argmax() ] += 1
+            #TODO: not needed?
+            allprobs[i] /= allprobs[i].sum()
             
         return conf, 1-conf.trace()/float(conf.sum()), allprobs
 
@@ -135,47 +144,29 @@ class NN:
 
     def passForward(self, row):
         # input
-        #for numNode in range(self.nNodes):
-        #    sum = 0.0
-        #    for nInput in range(self.nIn):
-        #        sum += row[nInput] * self.weights[0][nInput,numNode]
-        #    self.outs[0][numNode] = (sum, self.phi(sum))
         sum = row * self.weights[0]
         self.outs[0] = (sum, self.phi(sum))
 
-        #inner layers
+        # next layers
         for w in range( 1, self.nLayer+1 ):
-            #for numNode in range( self.nNodes ):
-            #    sum = 0.0
-            #    for nInput in range( self.nNodes ):
-            #        sum += self.outs[w-1][nInput][1] * self.weights[w][nInput,numNode]
-            #    self.outs[w][numNode] = (sum, self.phi(sum))
             sum = self.outs[w-1][1] * self.weights[w]
             self.outs[w] = (sum, self.phi(sum))
 
-        #output layer
-        #for numNode in range(self.nOut):
-        #    sum = 0.0
-        #    for nInput in range( self.nNodes ):
-        #        sum += self.outs[self.nLayer-1][nInput][1] * self.weights[-1][nInput,numNode]
-        #    self.outs[-1][numNode] = (sum, self.phi(sum))
         return self.outs[-1][1][0]
 
     ##############################################################################
 
-    def train(self, data, testdata):
+    def train(self, data):
         sse  = sys.maxint
         pp   = sys.maxint
-        lift = sys.maxint
+
+        self.initWeights( data.cls, data.feat )
 
         interactive = self.interactive and os.isatty(sys.stdout.fileno())
 
         ref = numpy.zeros( [1,self.nOut] )
-        c_old = None
+        c_old = 0
         allprobs = [None] * len(data)
-        classes      = [ d[0,0] for d in data ]
-        classes_test = [ d[0,0] for d in testdata ]
-        #pIndices = enumerate(range(self.nIn-self.nOut,self.nIn))
 
         for i in range(self.nIter):
             conf = numpy.zeros( [ self.nOut, self.nOut ] )
@@ -186,12 +177,10 @@ class NN:
             sce = 0.0
             if interactive: pbar = ProgressBar(maxval=len(data)).start()
             for k,row in enumerate(data):
-                probs = self.passForward(row[:,1:])
-                #for j,c in pIndices: data[k][0,c] = probs[0,j]
-                c = int(row[0,0])
-                ref[0,c_old] = 0.0
-                ref[0,c] = 1.0
-                c_old = c
+                probs = self.passForward(row)
+                ref[0,c_old] = 0
+                ref[0,data.targets[k]] = 1
+                c_old = data.targets[k]
 
                 diff = ref-probs
                 if self.errfct == "sse":
@@ -203,16 +192,17 @@ class NN:
                     # cross entropy: 1/C * sum{ (tk*log(yk)) + (1-tk)*log(1-yk) }
                     sce -= ((numpy.multiply(ref, numpy.log( probs )) + numpy.multiply((1-ref), numpy.log( 1 - probs )))).sum() / self.nOut
 
-                weightschange = self.passBackward(row[:,1:])
+                weightschange = self.passBackward(row)
                 if interactive: pbar.update(k)
 
                 # train statistics 
                 c_pred = probs.argmax()
-                conf[ int(row[0,0]), c_pred ] += 1
+                conf[ data.targets[k], c_pred ] += 1
                 allprobs[k] = probs
 
-            conf_, err, tepr = self.test( testdata )
-            output = self.metrics.obtain( testdata, classes_test, classes, allprobs, tepr, conf, err )
+            #conf_, err, tepr = self.test( testdata )
+            #conf_, err, tepr = self.test( data )
+            output = self.metrics.obtain( data, allprobs, conf, 1-conf.trace()/float(conf.sum()) )
 
             if self.errfct == "sse":
                 output["errfct"] = "SSE: % 6.4f" % sse
@@ -220,7 +210,7 @@ class NN:
                 output["errfct"] = "SCE: % 6.4f" % sce
 
             if interactive: pbar.finish()
-            metrics = "%(lift)s%(pp)s%(fscore)s%(tester)s" % output
+            metrics = "%(lift)s%(pp)s%(fscore)s%(tester)s%(auc)s" % output
             logging.warning("iter: % 4d er: %.6f %s rate: %.4f%s", i+1, 1-conf.trace()/conf.sum(), output["errfct"], self.etha, metrics)
             
             if weightschange < self.mindsumweights:
@@ -289,45 +279,4 @@ class NN:
         self.weights, self.config = pickle.load(file(modelname))
         self.reload(self.config, self.weights)
 
-
 ##############################################################################
-    
-def main(config):
-    dataTest  = Data(config.get("Input","test"), config.get("Input","format"))
-    dataTrain = Data(config.get("Input","train"), config.get("Input","format"))
-
-    net = NN(dataTrain.feat, dataTrain.cls, config)
-    model = config.get("Input", "loadmodel")
-    if model:
-        net.loadmodel(model)
-    else:
-        trpr = net.train( dataTrain, dataTest )
-
-    conf, err, tepr = net.test( dataTest )
-
-    print conf
-    print err
-
-    ftr = config.get("Output", "probstrain")
-    fte = config.get("Output", "probstest")
-    if ftr: Data.writeProbs(trpr, ftr)
-    if fte: Data.writeProbs(tepr, fte)
-
-    model = config.get("Output", "savemodel")
-    if model:
-        net.savemodel(model)
-    
-
-##############################################################################
-
-if __name__ == "__main__":
-    try:
-        import psyco
-        psyco.full()
-    except ImportError: pass
-    logging.basicConfig(format="%(message)s")
-
-    from usage import *
-    config = usage()
-
-    main(config)

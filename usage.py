@@ -17,7 +17,7 @@ from optparse import OptionParser, OptionGroup
 import ConfigParser
 
 def usage():
-    parser = OptionParser(version="1.0", description="netr")
+    parser = OptionParser(version="1.0", description="Copyright (C) 2009 Pavel Golik <http://code.google.com/p/netr>. This program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions; see 'LICENSE' for details.")
 
     ############################################################################
 
@@ -25,15 +25,15 @@ def usage():
 
     g = OptionGroup(parser, "Input")
     g.add_option("-c", "--config", dest="config", help="configuration file", metavar="FILE")
-    g.add_option("-t", "--tr", dest="train", help="train data", metavar="FILE")
-    g.add_option("-T", "--te", dest="test", help="test data", metavar="FILE")
+    g.add_option("-t", "--tr", dest="train", help="train data (use '.gz' extension for gzipped files)", metavar="FILE")
+    g.add_option("-T", "--te", dest="test", help="test data (use '.gz' extension for gzipped files)", metavar="FILE")
     g.add_option("-f", "--format", dest="format", help="data format %s"%f, )
     g.add_option("-u", "--loadmodel", dest="loadmodel", help="load model from file", metavar="FILE")
     parser.add_option_group(g)
 
     ############################################################################
     
-    a = ["logistic", "tanh", "linear", "softmax", "gauss", "step"]
+    a = ["logistic", "tanh", "linear", "softmax", "gauss", "sin"]
     w = ["randgauss", "randuni", "uniform"]
     e = ["sse", "sce"]
 
@@ -43,7 +43,7 @@ def usage():
     g.add_option("-n", "--nodes", dest="nodes", type="int", help="nodes per hidden layer", default=2)
     g.add_option("-a", "--activation", dest="activation", type="choice", help="activation function %s"%str(a), choices=a, default="logistic")
     g.add_option("-w", "--initweights", dest="initweights", type="choice", help="weights initialization %s"%str(w), choices=w, default="randgauss")
-    g.add_option("-r", "--errorfct", dest="errorfunction", type="choice", help="error function"%e, choices=e, default="sse")
+    g.add_option("-r", "--errorfct", dest="errorfunction", type="choice", help="error function %s"%e, choices=e, default="sse")
     parser.add_option_group(g)
 
     ############################################################################
@@ -56,10 +56,10 @@ def usage():
 
     ############################################################################
 
-    m = ["lift:<target_class>", "pp", "fmeasure:<target_class>","tester","auc:<target_class>",""]
+    m = ["lift", "pp", "fmeasure","tester","auc"]
 
     g = OptionGroup(parser, "Output")
-    g.add_option("-m", "--metrics", dest="metrics", type="choice", help="metrics to display (comma separated) %s"%str(filter(len,m)), default="", choices=m)
+    g.add_option("-m", "--metrics", dest="metrics", type="choice", help="metrics to display (comma separated) %s"%str(m), default="pp", choices=m)
     g.add_option("--probstr", dest="probstrain", help="write p(c|x) of train data to file", metavar="FILE")
     g.add_option("--probste", dest="probstest", help="write p(c|x) of test data to file", metavar="FILE")
     g.add_option("-v", "--verbosity", dest="verbosity", help="verbosity level [0,1,..]", default=1)
