@@ -24,11 +24,11 @@ def usage():
     f = ["jf", "svm", "csv:<delimiter>"]
 
     g = OptionGroup(parser, "Input")
-    g.add_option("-c", "--config", dest="config", help="configuration file", metavar="FILE")
-    g.add_option("-t", "--tr", dest="train", help="train data (use '.gz' extension for gzipped files)", metavar="FILE")
-    g.add_option("-T", "--te", dest="test", help="test data (use '.gz' extension for gzipped files)", metavar="FILE")
-    g.add_option("-f", "--format", dest="format", help="data format %s"%f, )
-    g.add_option("-u", "--loadmodel", dest="loadmodel", help="load model from file", metavar="FILE")
+    g.add_option("-c", "--config", dest="config", help="configuration file", metavar="FILE", default=None)
+    g.add_option("-t", "--tr", dest="train", help="train data (use '.gz' extension for gzipped files)", metavar="FILE", default=None)
+    g.add_option("-T", "--te", dest="test", help="test data (use '.gz' extension for gzipped files)", metavar="FILE", default=None)
+    g.add_option("-f", "--format", dest="format", help="data format %s"%f, default=None)
+    g.add_option("-u", "--loadmodel", dest="loadmodel", help="load model from file", metavar="FILE", default=None)
     parser.add_option_group(g)
 
     ############################################################################
@@ -56,15 +56,15 @@ def usage():
 
     ############################################################################
 
-    m = ["lift", "pp", "fmeasure","tester","auc"]
+    m = ["lift", "pp", "fmeasure", "tester", "auc"]
 
     g = OptionGroup(parser, "Output")
     g.add_option("-m", "--metrics", dest="metrics", type="choice", help="metrics to display (comma separated) %s"%str(m), default="pp", choices=m)
-    g.add_option("--probstr", dest="probstrain", help="write p(c|x) of train data to file", metavar="FILE")
-    g.add_option("--probste", dest="probstest", help="write p(c|x) of test data to file", metavar="FILE")
+    g.add_option("--probstr", dest="probstrain", help="write p(c|x) of train data to file", metavar="FILE", default=None)
+    g.add_option("--probste", dest="probstest", help="write p(c|x) of test data to file", metavar="FILE", default=None)
     g.add_option("-v", "--verbosity", dest="verbosity", help="verbosity level [0,1,..]", default=1)
-    g.add_option("-s", "--savemodel", dest="savemodel", help="save model to file", metavar="FILE")
-    g.add_option("-b", "--interactive", dest="interactive", help="show progress bar", default="True")
+    g.add_option("-s", "--savemodel", dest="savemodel", help="save model to file", metavar="FILE", default=None)
+    g.add_option("-b", "--interactive", dest="interactive", help="show progress bar", default="True", action="store_true")
     parser.add_option_group(g)
 
     ############################################################################
@@ -72,6 +72,14 @@ def usage():
     (options, args) = parser.parse_args(args=None, values=None)
 
     config = ConfigParser.SafeConfigParser(options.__dict__)
-    if options.config: config.read(options.config)
+    if options.config: 
+        config.read(options.config)
+        for g in parser.option_groups:
+            for key in g.option_list:
+                value = options.__dict__[key.dest]
+                if not value or value == key.default: continue
+                config.set( g.title, key.dest, str(value) )
+                if options.verbosity>1:
+                    print "Overriding option '%s' = '%s'" % (key.dest, value)
 
     return config
