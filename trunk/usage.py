@@ -14,7 +14,7 @@
 # along with netr.  If not, see <http://www.gnu.org/licenses/>.
 
 from optparse import OptionParser, OptionGroup
-import ConfigParser
+import ConfigParser, sys
 
 def usage():
     parser = OptionParser(version="1.0", description="Copyright (C) 2009 Pavel Golik <http://code.google.com/p/netr>. This program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions; see 'LICENSE' for details.")
@@ -70,6 +70,9 @@ def usage():
     ############################################################################
 
     (options, args) = parser.parse_args(args=None, values=None)
+    if len(sys.argv)==1:
+        parser.print_help()
+        sys.exit(-1)
 
     config = ConfigParser.SafeConfigParser(options.__dict__)
     if options.config: 
