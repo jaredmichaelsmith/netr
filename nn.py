@@ -44,7 +44,7 @@ class NN:
         self.deltas  = []
 
         self.generateActivationFunction()
-    
+
     ##############################################################################
 
     def generateActivationFunction(self):
@@ -212,10 +212,13 @@ class NN:
             if interactive: pbar.finish()
             metrics = "%(lift)s%(pp)s%(fscore)s%(tester)s%(auc)s" % output
             logging.warning("iter: % 4d er: %.6f %s rate: %.4f%s", i+1, 1-conf.trace()/conf.sum(), output["errfct"], self.etha, metrics)
-            
-            if weightschange < self.mindsumweights:
-                self.weights[-1] = self.weights[-1] + numpy.random.standard_normal([self.nNodes, self.nOut]) * 0.1
-                logging.warning("disturbing weights for leaving local optimum...")
+
+            #for i in range(len(self.weights)):
+            #    print "pruned:", (numpy.abs(self.weights[i])<0.1).sum()
+            #    self.weights[i][numpy.abs(self.weights[i])<0.1]=0
+            #if weightschange < self.mindsumweights:
+            #    self.weights[-1] = self.weights[-1] + numpy.random.standard_normal([self.nNodes, self.nOut]) * 0.1
+            #    logging.warning("disturbing weights for leaving local optimum...")
             
             if sumold - sse < self.mindsse or ppold - pp < self.mindpp:
                 self.etha *= self.stepsizedec
@@ -237,7 +240,7 @@ class NN:
             #    self.deltas[l][i] *= self.dphi( self.outs[l][i][0] )
         #self.etha *= (1-self.alpha)
         #output layer
-        delta = (1-self.alpha) * self.etha * numpy.outer( self.outs[-2][1], self.deltas[-1] ) + self.alpha * self.lastchange[-1]
+        delta = self.etha * numpy.outer( self.outs[-2][1], self.deltas[-1] ) + self.alpha * self.lastchange[-1]
         self.weights[-1] = self.weights[-1] + delta
         self.lastchange[-1] = delta
         #for j in range(self.nOut):

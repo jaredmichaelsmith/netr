@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with netr.  If not, see <http://www.gnu.org/licenses/>.
 
-import ConfigParser, logging, string
+import ConfigParser, logging, string, sys
 from nn import NN
 from data import Data
 
@@ -24,12 +24,16 @@ def main(config):
     if model:
         net.loadmodel(model)
     else:
-        dataTrain = Data(config.get("Input","train"), config.get("Input","format"), 1)
-        trpr = net.train( dataTrain )
+        dataTrain = Data(config.get("Input","train"), config.get("Input","format"), net.verbosity)
+        try:
+            trpr = net.train( dataTrain )
+        except KeyboardInterrupt:
+            sys.stderr.write("Aborting the training procedure...\n")
+            pass
     
     ctest = config.get("Input","test")
     if ctest:
-        dataTest = Data(ctest, config.get("Input","format"), 1)
+        dataTest = Data(ctest, config.get("Input","format"), net.verbosity)
         conf, err, tepr = net.test( dataTest )
 
         output = net.metrics.obtain( dataTest, tepr, conf, err )
